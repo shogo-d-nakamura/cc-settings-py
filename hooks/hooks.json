@@ -1,0 +1,112 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"python.*(train|fit)\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import torch; avail=torch.cuda.is_available(); count=torch.cuda.device_count() if avail else 0; print(f'[Hook] GPU available: {avail}, Device count: {count}'); [print(f'[Hook] GPU {i}: {torch.cuda.get_device_name(i)}') for i in range(count)]\" 2>/dev/null || echo '[Hook] PyTorch not available or no CUDA'"
+          }
+        ],
+        "description": "Check GPU availability before training"
+      },
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"(pip install|conda install|mamba install)\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] Remember to update environment.yml after installing packages'"
+          }
+        ],
+        "description": "Reminder to update environment file after package installation"
+      },
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"python.*(train|fit)\" && !(tool_input.command matches \"(tmux|screen|nohup|&$)\")",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] Consider running long training in tmux/screen for persistence' && echo '[Hook] tmux new -s train python train.py ...'"
+          }
+        ],
+        "description": "Remind to use tmux for long training runs"
+      },
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"git push\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] Review changes before push - ensure no credentials or large files'"
+          }
+        ],
+        "description": "Reminder before git push"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "tool == \"Edit\" && tool_input.file_path matches \"\\\\.py$\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check --fix \"${tool_input.file_path}\" 2>/dev/null || true"
+          }
+        ],
+        "description": "Auto-fix Python files with ruff after edits"
+      },
+      {
+        "matcher": "tool == \"Edit\" && tool_input.file_path matches \"\\\\.py$\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mypy \"${tool_input.file_path}\" --ignore-missing-imports 2>&1 | head -15 || true"
+          }
+        ],
+        "description": "Type check Python files with mypy after edits"
+      },
+      {
+        "matcher": "tool == \"Edit\" && tool_input.file_path matches \"\\\\.py$\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys; f=open('${tool_input.file_path}'); c=f.read(); f.close(); lines=c.split('\\n'); matches=[(i+1,l.strip()) for i,l in enumerate(lines) if 'print(' in l and 'debug' not in l.lower() and '#' not in l.split('print(')[0]]; [print(f'[Hook] WARNING: print() at line {n}: {l[:60]}...') for n,l in matches[:5]] if matches else None\" 2>/dev/null || true"
+          }
+        ],
+        "description": "Warn about print() statements in production code"
+      },
+      {
+        "matcher": "tool == \"Bash\" && tool_input.command matches \"pytest\"",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '[Hook] Tests completed. Consider checking coverage with --cov flag'"
+          }
+        ],
+        "description": "Reminder about test coverage after pytest"
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys; print(f'[Hook] Python: {sys.version.split()[0]}')\" 2>/dev/null && python -c \"import torch; print(f'[Hook] PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')\" 2>/dev/null && python -c \"import rdkit; print(f'[Hook] RDKit: {rdkit.__version__}')\" 2>/dev/null || echo '[Hook] Some packages not available - check environment'"
+          }
+        ],
+        "description": "Display Python/PyTorch/RDKit versions on session start"
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import os,sys; [print(f'[Hook] Modified .py file check: {f}') for f in os.popen('git diff --name-only 2>/dev/null').read().split() if f.endswith('.py')][:3]\" 2>/dev/null || true"
+          }
+        ],
+        "description": "Show recently modified Python files"
+      }
+    ]
+  }
+}
